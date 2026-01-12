@@ -1,6 +1,8 @@
 import PyPDF2, os
 from tkinter.filedialog import askdirectory
 from PyPDF2 import PdfReader, PdfMerger
+from tkinter.filedialog import asksaveasfilename
+import os
 
 # Seleccionar la carpeta donde se encuentran los archivos PDF
 folder = askdirectory() 
@@ -38,6 +40,21 @@ for filename in pdfFiles:
         #Actualizar el contador de páginas
         Primer_página += Number_of_pages +1
     
- # Escribir el contenido del merger en un nuevo archivo PDF 								  
-with open('Consolidado Total.pdf', 'wb') as f: 
-    pdfMerger.write(f)
+# Preguntar nombre de archivo para guardar
+nombre_archivo = asksaveasfilename(
+    initialdir=folder,
+    title='Guardar archivo consolidado',
+    initialfile='Consolidado Total.pdf',
+    defaultextension='.pdf',
+    filetypes=[('PDF files', '*.pdf'), ('All files', '*.*')]
+)
+
+if nombre_archivo:
+    with open(nombre_archivo, 'wb') as f:
+        pdfMerger.write(f)
+
+    # Guardar el TXT en la misma carpeta donde se guardó el consolidado
+    txt_path = os.path.splitext(nombre_archivo)[0] + '_Archivos_Procesados.txt'
+    with open(txt_path, 'w') as f:
+        for pdf in pdfFiles:
+            f.write(str(pdf) + '\n')

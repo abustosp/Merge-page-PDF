@@ -4,6 +4,7 @@ from tkinter.filedialog import askdirectory
 import io
 import pdfplumber
 import re
+from tkinter.filedialog import asksaveasfilename
 
 patron_exclusión = r"(TOTAL\n\$0\.00 \$0\.00 \$0\.00 \$0\.00 \$0\.00 \$0\.00 \$0\.00 \$0\.00 \$0\.00 \$0\.00 \$0\.00 \$0\.00)"
 
@@ -49,10 +50,22 @@ output = io.BytesIO()
 merger.write(output)
 output.seek(0)
 
-# Guardar el archivo PDF en la carpeta seleccionada
-with open(os.path.join(Carpeta, 'Consolidado última Hoja.pdf'), 'wb') as fout:
-    fout.write(output.read())
+# Preguntar nombre de archivo para guardar
+
+nombre_archivo = asksaveasfilename(
+    initialdir=Carpeta,
+    title='Guardar archivo consolidado',
+    initialfile='Consolidado última Hoja.pdf',
+    defaultextension='.pdf',
+    filetypes=[('PDF files', '*.pdf'), ('All files', '*.*')]
+)
+
+if nombre_archivo:
+    with open(nombre_archivo, 'wb') as fout:
+        fout.write(output.read())
     
-with open(os.path.join(Carpeta, 'Archivos Procesados.txt'), 'w') as f:
+# Guardar el TXT en la misma carpeta donde se guardó el consolidado
+txt_path = os.path.splitext(nombre_archivo)[0] + '_Archivos_Procesados.txt'
+with open(txt_path, 'w') as f:
     for pdf in merged_files:
         f.write(str(pdf) + '\n')
