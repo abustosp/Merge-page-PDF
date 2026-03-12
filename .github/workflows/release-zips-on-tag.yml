@@ -1,0 +1,157 @@
+name: Build and Release ZIPs (Tag)
+
+on:
+  push:
+    tags:
+      - '*'
+
+permissions:
+  contents: write
+
+jobs:
+  validate-tag:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.tag.outputs.version }}
+    steps:
+      - id: tag
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if [[ ! "$TAG" =~ ^[0-9]{8}(_[0-9]{6})?$ ]]; then
+            echo "Tag invalida: '$TAG'"
+            echo "Formato esperado: YYYYMMDD o YYYYMMDD_HHMMSS (ej: 20260312 o 20260312_143000)"
+            exit 1
+          fi
+          echo "version=$TAG" >> "$GITHUB_OUTPUT"
+
+  build-linux:
+    name: Build Linux ZIP
+    needs: validate-tag
+    runs-on: ubuntu-latest
+    env:
+      APP_VERSION: ${{ needs.validate-tag.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r Requirements.txt
+          pip install pyinstaller
+
+      - name: Build executable (Linux)
+        run: |
+          chmod +x build_linux.sh
+          ./build_linux.sh
+
+      - name: Package ZIP (Linux)
+        run: |
+          ZIP_NAME="ConsolidarPDF.${APP_VERSION}.Linux.zip"
+          PACKAGE_DIR="$RUNNER_TEMP/package-linux"
+          rm -rf "$PACKAGE_DIR"
+          mkdir -p "$PACKAGE_DIR"
+
+          cp -a "Ejecutable/ConsolidarPDF" "$PACKAGE_DIR/"
+          cp -a "Ejecutable/bin" "$PACKAGE_DIR/bin"
+
+          (
+            cd "$PACKAGE_DIR"
+            zip -r "$GITHUB_WORKSPACE/$ZIP_NAME" .
+          )
+
+      - name: Upload Linux ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-zip
+          path: ConsolidarPDF.${{ env.APP_VERSION }}.Linux.zip
+          if-no-files-found: error
+
+  build-windows:
+    name: Build Windows ZIP
+    needs: validate-tag
+    runs-on: windows-latest
+    env:
+      APP_VERSION: ${{ needs.validate-tag.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r Requirements.txt
+          pip install pyinstaller
+
+      - name: Build executable (Windows)
+        shell: pwsh
+        run: |
+          .\build_windows.ps1
+
+      - name: Package ZIP (Windows)
+        shell: pwsh
+        run: |
+          $zipName = "ConsolidarPDF.$env:APP_VERSION.Windows.zip"
+          $packageDir = Join-Path $env:RUNNER_TEMP "package-windows"
+
+          if (Test-Path $packageDir) {
+            Remove-Item $packageDir -Recurse -Force
+          }
+          New-Item -ItemType Directory -Path $packageDir | Out-Null
+
+          Copy-Item ".\Ejecutable\ConsolidarPDF.exe" $packageDir -Force
+
+          if (Test-Path ".\Ejecutable\bin") {
+            Copy-Item ".\Ejecutable\bin" (Join-Path $packageDir "bin") -Recurse -Force
+          }
+
+          $destZip = Join-Path $env:GITHUB_WORKSPACE $zipName
+          if (Test-Path $destZip) {
+            Remove-Item $destZip -Force
+          }
+
+          $itemsToZip = Get-ChildItem -Path $packageDir -Force | ForEach-Object { $_.FullName }
+          if (-not $itemsToZip) {
+            throw "No hay archivos para comprimir en $packageDir"
+          }
+
+          Compress-Archive -Path $itemsToZip -DestinationPath $destZip -Force
+
+      - name: Upload Windows ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-zip
+          path: ConsolidarPDF.${{ env.APP_VERSION }}.Windows.zip
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    needs:
+      - validate-tag
+      - build-linux
+      - build-windows
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+
+      - name: Create/Update release and upload ZIPs
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ConsolidarPDF ${{ needs.validate-tag.outputs.version }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            release-assets/**/*.zip
