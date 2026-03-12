@@ -1,6 +1,9 @@
 import pdfplumber
 import os
+import logging
 from tkinter.filedialog import askdirectory
+
+logging.getLogger("pdfminer").setLevel(logging.ERROR)
 
 directorio = askdirectory(title="Selecciona una carpeta con PDFs")
 

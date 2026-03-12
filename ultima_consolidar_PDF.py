@@ -26,7 +26,8 @@ for pdf in pdfFiles:
         pdf_reader = PdfReader(f)
         number_of_pages = len(pdf_reader.pages) - 1
         # Agregar la última página del archivo al merger
-        merger.append(pdf_reader, pages=(number_of_pages, (number_of_pages + 1)))
+        nombre = os.path.splitext(os.path.basename(pdf))[0]
+        merger.append(pdf_reader, pages=(number_of_pages, (number_of_pages + 1)), outline_item=nombre)
 
 # Escribir el archivo PDF resultante en memoria
 output = io.BytesIO()

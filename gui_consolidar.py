@@ -243,7 +243,8 @@ class ConsolidadorPDFGUI:
                 with open(pdf, 'rb') as f:
                     pdf_reader = PdfReader(f)
                     number_of_pages = len(pdf_reader.pages) - 1
-                    merger.append(pdf_reader, pages=(number_of_pages, (number_of_pages + 1)))
+                    nombre = os.path.splitext(os.path.basename(pdf))[0]
+                    merger.append(pdf_reader, pages=(number_of_pages, (number_of_pages + 1)), outline_item=nombre)
             
             # Escribir en memoria
             output = io.BytesIO()
@@ -324,7 +325,8 @@ class ConsolidadorPDFGUI:
                             continue
                     
                     # Agregar última página
-                    merger.append(pdf_reader, pages=(number_of_pages, (number_of_pages + 1)))
+                    nombre = os.path.splitext(os.path.basename(pdf))[0]
+                    merger.append(pdf_reader, pages=(number_of_pages, (number_of_pages + 1)), outline_item=nombre)
                     merged_files.append(pdf)
             
             if not merged_files:
