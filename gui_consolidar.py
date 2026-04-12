@@ -3,13 +3,19 @@ from tkinter import ttk, messagebox, filedialog
 import os
 import io
 from PyPDF2 import PdfReader, PdfWriter, PdfMerger
-import pdfplumber
 import re
 
 # Colores del tema
 BG = "#2e2e2e"
 FG = "#ffffff"
 ACCENT = "#d35400"
+
+
+def normalize_cropboxes(pdf_reader):
+    """Completa CropBox faltante usando MediaBox para evitar warnings de PyPDF2."""
+    for page in pdf_reader.pages:
+        if "/CropBox" not in page:
+            page.cropbox = page.mediabox
 
 
 class ConsolidadorPDFGUI:
@@ -179,6 +185,7 @@ class ConsolidadorPDFGUI:
             for filename in pdfFiles:
                 with open(filename, 'rb') as f:
                     pdf_reader = PdfReader(f)
+                    normalize_cropboxes(pdf_reader)
                     Number_of_pages = len(pdf_reader.pages) - 1
                     pdfMerger.append(pdf_reader, pages=(0, Number_of_pages + 1))
                     pdfMerger.add_outline_item(title=str(os.path.basename(filename)), pagenum=Primer_página)
@@ -242,6 +249,7 @@ class ConsolidadorPDFGUI:
             for pdf in pdfFiles:
                 with open(pdf, 'rb') as f:
                     pdf_reader = PdfReader(f)
+                    normalize_cropboxes(pdf_reader)
                     number_of_pages = len(pdf_reader.pages) - 1
                     nombre = os.path.splitext(os.path.basename(pdf))[0]
                     merger.append(pdf_reader, pages=(number_of_pages, (number_of_pages + 1)), outline_item=nombre)
@@ -313,16 +321,20 @@ class ConsolidadorPDFGUI:
             for pdf in pdfFiles:
                 with open(pdf, 'rb') as f:
                     pdf_reader = PdfReader(f)
+                    normalize_cropboxes(pdf_reader)
+
+                    # Ignorar PDFs sin páginas para evitar errores al extraer texto
+                    if len(pdf_reader.pages) == 0:
+                        continue
+
                     number_of_pages = len(pdf_reader.pages) - 1
-                    
-                    # Leer primera página para verificar si tiene movimientos
-                    with pdfplumber.open(f) as pdfp:
-                        primera_pagina = pdfp.pages[0]
-                        texto = primera_pagina.extract_text()
-                        
-                        # Excluir si no tiene movimientos
-                        if re.search(patron_exclusión, texto):
-                            continue
+
+                    # Leer primera página con PyPDF2 para evitar warnings de CropBox de pdfplumber
+                    texto = pdf_reader.pages[0].extract_text() or ""
+
+                    # Excluir si no tiene movimientos
+                    if re.search(patron_exclusión, texto):
+                        continue
                     
                     # Agregar última página
                     nombre = os.path.splitext(os.path.basename(pdf))[0]
