@@ -4,6 +4,15 @@ import os
 import io
 from PyPDF2 import PdfReader, PdfWriter, PdfMerger
 import re
+import logging
+
+logging.getLogger("pdfminer").setLevel(logging.ERROR)
+
+try:
+    import pdfplumber
+    HAS_PDFPLUMBER = True
+except ImportError:
+    HAS_PDFPLUMBER = False
 
 # Colores del tema
 BG = "#2e2e2e"
@@ -286,6 +295,39 @@ class ConsolidadorPDFGUI:
         except Exception as e:
             messagebox.showerror("Error", f"Error al consolidar: {str(e)}")
     
+    def _pdf_tiene_movimientos(self, pdf_path, pdf_reader):
+        """Verifica si un PDF tiene movimientos (transacciones) usando pdfplumber o PyPDF2."""
+        patron_exclusión = re.compile(
+            r"TOTAL[^\n]*\$0[.,]00(?:\s*\$0[.,]00)+"
+            r"|SIN\s*MOVIMIENTO",
+            re.IGNORECASE,
+        )
+
+        # Intentar con pdfplumber primero (mejor extracción de texto)
+        if HAS_PDFPLUMBER:
+            try:
+                texto_completo = ""
+                with pdfplumber.open(pdf_path) as pdf:
+                    for page in pdf.pages:
+                        texto_completo += (page.extract_text() or "") + "\n"
+                if not texto_completo.strip():
+                    return False
+                if patron_exclusión.search(texto_completo):
+                    return False
+                return True
+            except Exception:
+                pass  # Fallback a PyPDF2
+
+        # Fallback: PyPDF2 en todas las páginas
+        texto_completo = ""
+        for page in pdf_reader.pages:
+            texto_completo += (page.extract_text() or "") + "\n"
+        if not texto_completo.strip():
+            return False
+        if patron_exclusión.search(texto_completo):
+            return False
+        return True
+
     def consolidacion_ultima_con_movimientos(self):
         """Consolidar última hoja solo de PDFs con movimientos"""
         try:
@@ -295,9 +337,6 @@ class ConsolidadorPDFGUI:
                 return
             
             os.chdir(Carpeta)
-            
-            # Patrón para excluir PDFs sin movimientos
-            patron_exclusión = r"(TOTAL\n\$0\.00 \$0\.00 \$0\.00 \$0\.00 \$0\.00 \$0\.00 \$0\.00 \$0\.00 \$0\.00 \$0\.00 \$0\.00 \$0\.00)"
             
             # Obtener todos los archivos PDF
             pdfFiles = []
@@ -323,17 +362,14 @@ class ConsolidadorPDFGUI:
                     pdf_reader = PdfReader(f)
                     normalize_cropboxes(pdf_reader)
 
-                    # Ignorar PDFs sin páginas para evitar errores al extraer texto
+                    # Ignorar PDFs sin páginas
                     if len(pdf_reader.pages) == 0:
                         continue
 
                     number_of_pages = len(pdf_reader.pages) - 1
 
-                    # Leer primera página con PyPDF2 para evitar warnings de CropBox de pdfplumber
-                    texto = pdf_reader.pages[0].extract_text() or ""
-
-                    # Excluir si no tiene movimientos
-                    if re.search(patron_exclusión, texto):
+                    # Verificar si tiene movimientos
+                    if not self._pdf_tiene_movimientos(pdf, pdf_reader):
                         continue
                     
                     # Agregar última página

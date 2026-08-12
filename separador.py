@@ -3,6 +3,13 @@ from PyPDF2 import PdfReader, PdfWriter
 from tkinter.filedialog import askdirectory
 import shutil
 
+
+def normalize_cropboxes(pdf_reader):
+    """Completa CropBox faltante usando MediaBox para evitar warnings de PyPDF2."""
+    for page in pdf_reader.pages:
+        if "/CropBox" not in page:
+            page.cropbox = page.mediabox
+
 def extract_pdf_pages():
     # Seleccionar carpeta
     folder_path = askdirectory(title="Selecciona una carpeta")
@@ -19,6 +26,7 @@ def extract_pdf_pages():
         if filename.endswith(".pdf"):
             pdf_path = os.path.join(folder_path, filename)
             pdf_reader = PdfReader(pdf_path)
+            normalize_cropboxes(pdf_reader)
             num_pages = len(pdf_reader.pages)
 
             # Extraer cada página y guardarla como un nuevo PDF

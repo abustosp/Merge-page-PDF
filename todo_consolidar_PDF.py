@@ -4,6 +4,13 @@ from PyPDF2 import PdfReader, PdfMerger
 from tkinter.filedialog import asksaveasfilename
 import os
 
+
+def normalize_cropboxes(pdf_reader):
+    """Completa CropBox faltante usando MediaBox para evitar warnings de PyPDF2."""
+    for page in pdf_reader.pages:
+        if "/CropBox" not in page:
+            page.cropbox = page.mediabox
+
 # Seleccionar la carpeta donde se encuentran los archivos PDF
 folder = askdirectory() 
 os.chdir(folder) 
@@ -31,6 +38,7 @@ for filename in pdfFiles:
     with open(filename, 'rb') as f: 
         #Crear un objeto PDF reader para cada archivo PDF
         pdf_reader = PdfReader(f)
+        normalize_cropboxes(pdf_reader)
         #Obtener el número de páginas del archivo PDF
         Number_of_pages = len(pdf_reader.pages) -1
         #Agregar un marcador de página para cada archivo PDF sin el path

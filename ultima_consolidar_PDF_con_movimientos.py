@@ -2,11 +2,59 @@ import os
 from PyPDF2 import PdfReader, PdfWriter, PdfMerger
 from tkinter.filedialog import askdirectory
 import io
-import pdfplumber
 import re
 from tkinter.filedialog import asksaveasfilename
+import logging
 
-patron_exclusión = r"(TOTAL\n\$0\.00 \$0\.00 \$0\.00 \$0\.00 \$0\.00 \$0\.00 \$0\.00 \$0\.00 \$0\.00 \$0\.00 \$0\.00 \$0\.00)"
+logging.getLogger("pdfminer").setLevel(logging.ERROR)
+
+try:
+    import pdfplumber
+    HAS_PDFPLUMBER = True
+except ImportError:
+    HAS_PDFPLUMBER = False
+
+
+def normalize_cropboxes(pdf_reader):
+    """Completa CropBox faltante usando MediaBox para evitar warnings de PyPDF2."""
+    for page in pdf_reader.pages:
+        if "/CropBox" not in page:
+            page.cropbox = page.mediabox
+
+
+def pdf_tiene_movimientos(pdf_path, pdf_reader):
+    """Verifica si un PDF tiene movimientos (transacciones) usando pdfplumber o PyPDF2."""
+    patron_exclusión = re.compile(
+        r"TOTAL[^\n]*\$0[.,]00(?:\s*\$0[.,]00)+"
+        r"|SIN\s*MOVIMIENTO",
+        re.IGNORECASE,
+    )
+
+    # Intentar con pdfplumber primero (mejor extracción de texto)
+    if HAS_PDFPLUMBER:
+        try:
+            texto_completo = ""
+            with pdfplumber.open(pdf_path) as pdf:
+                for page in pdf.pages:
+                    texto_completo += (page.extract_text() or "") + "\n"
+            if not texto_completo.strip():
+                return False
+            if patron_exclusión.search(texto_completo):
+                return False
+            return True
+        except Exception:
+            pass  # Fallback a PyPDF2
+
+    # Fallback: PyPDF2 en todas las páginas
+    texto_completo = ""
+    for page in pdf_reader.pages:
+        texto_completo += (page.extract_text() or "") + "\n"
+    if not texto_completo.strip():
+        return False
+    if patron_exclusión.search(texto_completo):
+        return False
+    return True
+
 
 # Preguntar por la ruta de la carpeta
 Carpeta = askdirectory(title='Seleccionar carpeta')
@@ -30,17 +78,18 @@ merged_files = []
 for pdf in pdfFiles:
     with open(pdf, 'rb') as f:
         pdf_reader = PdfReader(f)
+        normalize_cropboxes(pdf_reader)
+
+        # Ignorar PDFs sin páginas
+        if len(pdf_reader.pages) == 0:
+            continue
+
         number_of_pages = len(pdf_reader.pages) - 1
-        
-        # Leer el contenido de la primera página con pdfplumber
-        with pdfplumber.open(f) as pdfp:
-            primera_pagina = pdfp.pages[0]
-            texto = primera_pagina.extract_text()
-            
-            # Excluir los archivos que contienen el patrón de exclusión
-            if re.search(patron_exclusión, texto):
-                continue
-        
+
+        # Verificar si tiene movimientos
+        if not pdf_tiene_movimientos(pdf, pdf_reader):
+            continue
+
         # Agregar la última página del archivo al merger
         nombre = os.path.splitext(os.path.basename(pdf))[0]
         merger.append(pdf_reader, pages=(number_of_pages, (number_of_pages + 1)), outline_item=nombre)
